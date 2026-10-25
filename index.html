@@ -34,12 +34,14 @@ button.d{color:var(--acc)}
 .item b{display:block}
 .item p{margin:4px 0 0;color:var(--mut);font-size:.92rem;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .empty{color:var(--mut);text-align:center;padding:18px 0}
+.pub{display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer}.pub input{width:auto}
+#site{width:100%;margin-bottom:6px}
 </style>
 </head>
 <body>
 <main>
-  <h1>Daily Diary</h1>
-  <p class="sub">Tulis apa saja yang kamu rasakan hari ini.</p>
+  <h1>📔 Diary Harianku</h1>
+  <p class="sub">Tulis apa saja yang kamu rasakan hari ini. Isinya tersimpan di browser kamu sendiri.</p>
 
   <section class="card" aria-label="Editor">
     <div class="row">
@@ -52,6 +54,7 @@ button.d{color:var(--acc)}
       <input class="title" id="title" placeholder="Judul (boleh dikosongkan)" aria-label="Judul">
     </div>
     <textarea id="text" placeholder="Hari ini aku…" aria-label="Isi diary"></textarea>
+    <label class="pub"><input type="checkbox" id="pub"> Tampilkan ke publik (saat menekan Terbitkan)</label>
     <div class="bar">
       <span class="mut" id="count">0 kata</span>
       <div class="btns">
@@ -68,8 +71,9 @@ button.d{color:var(--acc)}
     <input class="search" id="q" type="search" placeholder="Cari judul atau isi…" aria-label="Cari">
     <div id="list"></div>
     <div class="bar">
-      <span class="mut">Cadangkan tulisanmu secara berkala.</span>
+      <div style="flex:1 1 240px"><input id="site" placeholder="Nama diary publik, mis. Catatan Rina" aria-label="Nama diary publik"><div class="mut">Cadangkan tulisanmu secara berkala.</div></div>
       <div class="btns">
+        <button class="p" id="pubbtn">Terbitkan</button>
         <button id="exp">Ekspor</button>
         <button id="imp">Impor</button>
         <input type="file" id="file" accept="application/json,.json" hidden>
@@ -78,6 +82,7 @@ button.d{color:var(--acc)}
   </section>
 </main>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (function(){
   var KEY="diary:v1", entries=[], curId=null, delArmed=false, memo=null;
@@ -99,14 +104,14 @@ button.d{color:var(--acc)}
 
   function fresh(){
     curId=null;delArmed=false;
-    $("date").value=today();$("mood").value="";$("title").value="";$("text").value="";
+    $("date").value=today();$("mood").value="";$("title").value="";$("text").value="";$("pub").checked=false;
     $("del").hidden=true;$("del").textContent="Hapus";
     $("count").textContent="0 kata";say("");render();
   }
   function open(id){
     var e=entries.filter(function(x){return x.id===id})[0];if(!e)return;
     curId=id;delArmed=false;
-    $("date").value=e.date;$("mood").value=e.mood||"";$("title").value=e.title||"";$("text").value=e.text||"";
+    $("date").value=e.date;$("mood").value=e.mood||"";$("title").value=e.title||"";$("text").value=e.text||"";$("pub").checked=!!e.pub;
     $("del").hidden=false;$("del").textContent="Hapus";
     $("count").textContent=words()+" kata";say("Sedang mengedit tulisan ini.");render();
     window.scrollTo({top:0,behavior:"smooth"});
@@ -114,7 +119,7 @@ button.d{color:var(--acc)}
   function save(){
     var text=$("text").value.trim();
     if(!text){say("Tulis sesuatu dulu ya.");return;}
-    var data={date:$("date").value||today(),mood:$("mood").value,title:$("title").value.trim(),text:$("text").value,updated:Date.now()};
+    var data={date:$("date").value||today(),mood:$("mood").value,title:$("title").value.trim(),text:$("text").value,pub:$("pub").checked,updated:Date.now()};
     if(curId){entries=entries.map(function(x){return x.id===curId?Object.assign({},x,data):x});}
     else{curId="e"+Date.now();entries.push(Object.assign({id:curId},data));}
     var ok=persist();
@@ -136,7 +141,7 @@ button.d{color:var(--acc)}
     arr.forEach(function(e){
       var it=document.createElement("div");it.className="item"+(e.id===curId?" on":"");
       it.tabIndex=0;it.setAttribute("role","button");
-      var b=document.createElement("b");b.textContent=(e.mood?e.mood.split(" ")[0]+" ":"")+(e.title||"Tanpa judul")+" · "+fmt(e.date);
+      var b=document.createElement("b");b.textContent=(e.mood?e.mood.split(" ")[0]+" ":"")+(e.title||"Tanpa judul")+" · "+fmt(e.date)+(e.pub?" · 🌐 publik":"");
       var p=document.createElement("p");p.textContent=e.text;
       it.appendChild(b);it.appendChild(p);
       it.onclick=function(){open(e.id)};
@@ -163,6 +168,31 @@ button.d{color:var(--acc)}
     r.readAsText(f);
   }
 
+  function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+  function slug(e){var t=(e.title||"tulisan").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,40)||"tulisan";return e.date+"-"+t+"-"+String(e.id).slice(-4);}
+  var PCSS=":root{color-scheme:light dark;--bg:#f6f1e7;--ink:#2f2a24;--mut:#7a6f62;--line:#e4dccb;--acc:#b5543a}@media(prefers-color-scheme:dark){:root{--bg:#1c1915;--ink:#efe7d8;--mut:#a39785;--line:#3a342b;--acc:#d9795c}}body{margin:0;background:var(--bg);color:var(--ink);font:18px/1.8 Georgia,serif}main{max-width:680px;margin:0 auto;padding:32px 18px 64px}a{color:var(--acc)}h1{margin:.2em 0}.m{color:var(--mut);font-size:.9rem}.t{white-space:pre-wrap;margin-top:1.4em}.i{display:block;padding:14px 0;border-bottom:1px solid var(--line);text-decoration:none;color:var(--ink)}.i b{display:block}.i span{color:var(--mut);font-size:.9rem}";
+  function page(title,body){return "<!DOCTYPE html><html lang=\"id\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>"+esc(title)+"</title><style>"+PCSS+"</style></head><body><main>"+body+"</main></body></html>";}
+  function publish(){
+    var pubs=entries.filter(function(e){return e.pub}).sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:b.updated-a.updated;});
+    if(!pubs.length){say("Belum ada tulisan yang ditandai publik. Centang “Tampilkan ke publik” pada tulisan, lalu Simpan.");return;}
+    if(!window.JSZip){say("Pustaka ZIP gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.");return;}
+    var name=$("site").value.trim()||"Diary";
+    try{localStorage.setItem(KEY+":site",name);}catch(e){}
+    var z=new JSZip(),list="";
+    pubs.forEach(function(e){
+      var s=slug(e),t=e.title||"Tanpa judul";
+      z.file("tulisan/"+s+".html",page(t+" · "+name,"<p><a href=\"../index.html\">← "+esc(name)+"</a></p><h1>"+esc(t)+"</h1><div class=\"m\">"+esc(fmt(e.date))+(e.mood?" · "+esc(e.mood):"")+"</div><div class=\"t\">"+esc(e.text)+"</div>"));
+      list+="<a class=\"i\" href=\"tulisan/"+s+".html\"><b>"+esc(t)+"</b><span>"+esc(fmt(e.date))+"</span></a>";
+    });
+    z.file("index.html",page(name,"<h1>"+esc(name)+"</h1><p class=\"m\">"+pubs.length+" tulisan</p>"+list));
+    z.generateAsync({type:"blob"}).then(function(b){
+      var url=URL.createObjectURL(b),a=document.createElement("a");
+      a.href=url;a.download="diary-publik.zip";document.body.appendChild(a);a.click();a.remove();
+      setTimeout(function(){URL.revokeObjectURL(url)},1000);
+      say(pubs.length+" tulisan diterbitkan ke diary-publik.zip. Ekstrak, lalu unggah isinya ke GitHub Pages.");
+    });
+  }
+  $("pubbtn").onclick=publish;
   $("save").onclick=save;$("new").onclick=fresh;$("del").onclick=remove;
   $("text").oninput=function(){$("count").textContent=words()+" kata"};
   $("q").oninput=render;
@@ -171,7 +201,7 @@ button.d{color:var(--acc)}
   $("file").onchange=function(){if(this.files[0])importJson(this.files[0]);this.value="";};
   document.addEventListener("keydown",function(e){if((e.ctrlKey||e.metaKey)&&e.key==="s"){e.preventDefault();save();}});
 
-  load();fresh();
+  load();try{$("site").value=localStorage.getItem(KEY+":site")||"";}catch(e){}fresh();
 })();
 </script>
 </body>
